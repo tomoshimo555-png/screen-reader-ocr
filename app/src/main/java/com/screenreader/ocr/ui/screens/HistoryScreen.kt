@@ -116,7 +116,7 @@ fun HistoryScreen(
                     if (searchQuery.isEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "テキスト化モードで画面をキャプチャしてください",
+                            text = "文字起こしモードで画面をキャプチャしてください",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                         )

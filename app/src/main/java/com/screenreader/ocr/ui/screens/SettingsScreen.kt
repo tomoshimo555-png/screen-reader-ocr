@@ -113,7 +113,7 @@ fun SettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "画面上のテキストを自動認識して保存する汎用リーディング補助ツールです。",
+                    text = "画面上の文章を正確に文字起こしして保存するリーディング補助ツールです。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -125,7 +125,7 @@ fun SettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "1. テキスト化モードをON\n2. 青い枠をキャプチャしたい領域に移動\n3. 他のアプリに切り替えて閲覧\n4. 自動でOCR・テキスト保存\n5. 重複ページは自動スキップ",
+                    text = "1. 文字起こしモードをON\n2. 青い枠をキャプチャしたい領域に移動\n3. 他のアプリに切り替えて閲覧\n4. 自動でOCR・文字起こし保存\n5. 重複ページは自動スキップ",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -54,7 +54,7 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "画面上のテキストを自動認識・保存",
+            text = "画面の文章を正確に文字起こし・保存",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -91,7 +91,7 @@ fun HomeScreen(
                 ) {
                     Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("テキスト化", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("文字起こし", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
                 // Screenshot mode button
                 FilledTonalButton(
@@ -156,7 +156,7 @@ fun HomeScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (isCapturing) "停止" else if (captureMode == "text") "テキスト化\nモード" else "スクショ\nモード",
+                        text = if (isCapturing) "停止" else if (captureMode == "text") "文字起こし\nモード" else "スクショ\nモード",
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,

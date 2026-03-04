@@ -129,8 +129,9 @@ class FloatingOverlayService : Service() {
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = 100
+            gravity = Gravity.TOP or Gravity.START
+            x = 8
+            y = 24
         }
 
         windowManager.addView(controlPanel, controlParams)
@@ -195,26 +196,21 @@ class FloatingOverlayService : Service() {
 
     private fun createControlPanel(): LinearLayout {
         val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.argb(220, 30, 30, 30))
-            setPadding(24, 16, 24, 16)
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.argb(200, 30, 30, 30))
+            setPadding(12, 6, 12, 6)
             elevation = 8f
+            gravity = Gravity.CENTER_VERTICAL
         }
 
         // Status text
         statusText = TextView(this).apply {
-            text = "待機中..."
+            text = "待機中"
             setTextColor(Color.WHITE)
-            textSize = 13f
-            setPadding(0, 0, 0, 12)
+            textSize = 10f
+            setPadding(0, 0, 8, 0)
         }
         panel.addView(statusText)
-
-        // Button row
-        val buttonRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
 
         // Pause/Resume button
         val pauseBtn = createButton("⏸").apply {
@@ -227,16 +223,16 @@ class FloatingOverlayService : Service() {
                     this.action = action
                 }
                 startService(intent)
-                statusText?.text = if (isPaused) "一時停止中" else "キャプチャ中..."
+                statusText?.text = if (isPaused) "停止中" else "実行中"
             }
         }
-        buttonRow.addView(pauseBtn)
+        panel.addView(pauseBtn)
 
         // Spacer
         val spacer = View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(24, 1)
+            layoutParams = LinearLayout.LayoutParams(8, 1)
         }
-        buttonRow.addView(spacer)
+        panel.addView(spacer)
 
         // Stop button
         val stopBtn = createButton("⏹").apply {
@@ -247,19 +243,18 @@ class FloatingOverlayService : Service() {
                 stopSelf()
             }
         }
-        buttonRow.addView(stopBtn)
+        panel.addView(stopBtn)
 
-        panel.addView(buttonRow)
         return panel
     }
 
     private fun createButton(label: String): TextView {
         return TextView(this).apply {
             text = label
-            textSize = 24f
+            textSize = 16f
             setTextColor(Color.WHITE)
-            setBackgroundColor(Color.argb(100, 100, 100, 100))
-            setPadding(32, 16, 32, 16)
+            setBackgroundColor(Color.argb(80, 100, 100, 100))
+            setPadding(16, 8, 16, 8)
             gravity = Gravity.CENTER
         }
     }
