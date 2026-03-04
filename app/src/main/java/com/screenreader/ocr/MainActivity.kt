@@ -44,6 +44,7 @@ class MainActivity : ComponentActivity() {
     private var statusText by mutableStateOf("")
     private var captureIntervalSeconds by mutableIntStateOf(5)
     private var similarityThreshold by mutableFloatStateOf(0.80f)
+    private var geminiApiKey by mutableStateOf("")
     private var captureMode by mutableStateOf("text")
 
     private val mediaProjectionLauncher = registerForActivityResult(
@@ -87,6 +88,12 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
+
+        // Load settings from SharedPreferences
+        val prefs = getSharedPreferences("settings", Context.MODE_PRIVATE)
+        captureIntervalSeconds = prefs.getInt("capture_interval", 5)
+        similarityThreshold = prefs.getFloat("similarity_threshold", 0.80f)
+        geminiApiKey = prefs.getString("gemini_api_key", "") ?: ""
 
         // Register broadcast receiver for capture status updates
         val filter = IntentFilter(ScreenCaptureService.BROADCAST_STATUS)
@@ -224,11 +231,23 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 composable("settings") {
+                    val prefs = getSharedPreferences("settings", Context.MODE_PRIVATE)
                     SettingsScreen(
                         captureIntervalSeconds = captureIntervalSeconds,
                         similarityThreshold = similarityThreshold,
-                        onCaptureIntervalChange = { captureIntervalSeconds = it },
-                        onSimilarityThresholdChange = { similarityThreshold = it }
+                        geminiApiKey = geminiApiKey,
+                        onCaptureIntervalChange = { 
+                            captureIntervalSeconds = it
+                            prefs.edit().putInt("capture_interval", it).apply()
+                        },
+                        onSimilarityThresholdChange = { 
+                            similarityThreshold = it 
+                            prefs.edit().putFloat("similarity_threshold", it).apply()
+                        },
+                        onGeminiApiKeyChange = {
+                            geminiApiKey = it
+                            prefs.edit().putString("gemini_api_key", it).apply()
+                        }
                     )
                 }
             }
@@ -236,6 +255,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startCapture() {
+        if (captureMode == "text" && geminiApiKey.isBlank()) {
+            Toast.makeText(this, "まず設定画面でGemini APIキーを入力してください", Toast.LENGTH_LONG).show()
+            return
+        }
+
         // Step 1: Check overlay permission
         if (!Settings.canDrawOverlays(this)) {
             val intent = Intent(
@@ -266,7 +290,8 @@ class MainActivity : ComponentActivity() {
             resultData,
             interval = captureIntervalSeconds * 1000L,
             sessionId = sessionId,
-            captureMode = captureMode
+            captureMode = captureMode,
+            apiKey = geminiApiKey
         )
         startForegroundService(captureIntent)
 

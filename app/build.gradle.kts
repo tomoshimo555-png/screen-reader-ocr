@@ -64,9 +64,8 @@ dependencies {
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.6")
 
-    // ML Kit Text Recognition (Japanese + Latin)
-    implementation("com.google.mlkit:text-recognition:16.0.0")
-    implementation("com.google.mlkit:text-recognition-japanese:16.0.0")
+    // Gemini API
+    implementation("com.google.ai.client.generativeai:generativeai:0.2.2")
 
     // Core KTX
     implementation("androidx.core:core-ktx:1.12.0")

@@ -61,6 +61,8 @@ class ScreenCaptureService : Service() {
         const val MODE_TEXT = "text"
         const val MODE_SCREENSHOT = "screenshot"
 
+        const val EXTRA_API_KEY = "api_key"
+
         // Broadcast for status updates
         const val BROADCAST_STATUS = "com.screenreader.ocr.STATUS_UPDATE"
         const val EXTRA_STATUS_TEXT = "status_text"
@@ -73,7 +75,8 @@ class ScreenCaptureService : Service() {
             resultData: Intent,
             interval: Long = 5000L,
             sessionId: String = "",
-            captureMode: String = MODE_TEXT
+            captureMode: String = MODE_TEXT,
+            apiKey: String = ""
         ): Intent {
             return Intent(context, ScreenCaptureService::class.java).apply {
                 action = ACTION_START
@@ -82,6 +85,7 @@ class ScreenCaptureService : Service() {
                 putExtra(EXTRA_INTERVAL, interval)
                 putExtra(EXTRA_SESSION_ID, sessionId)
                 putExtra(EXTRA_CAPTURE_MODE, captureMode)
+                putExtra(EXTRA_API_KEY, apiKey)
             }
         }
 
@@ -109,7 +113,7 @@ class ScreenCaptureService : Service() {
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
 
-    private val ocrProcessor = OcrProcessor()
+    private lateinit var ocrProcessor: OcrProcessor
     private val duplicateDetector = DuplicateDetector()
     private lateinit var sessionRepository: SessionRepository
 
@@ -178,6 +182,9 @@ class ScreenCaptureService : Service() {
                 captureInterval = intent.getLongExtra(EXTRA_INTERVAL, 5000L)
                 sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: System.currentTimeMillis().toString()
                 captureMode = intent.getStringExtra(EXTRA_CAPTURE_MODE) ?: MODE_TEXT
+                val apiKey = intent.getStringExtra(EXTRA_API_KEY) ?: ""
+
+                ocrProcessor = OcrProcessor(apiKey)
 
                 if (resultData != null) {
                     startForeground(NOTIFICATION_ID, createNotification("準備中..."))

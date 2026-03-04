@@ -1,122 +1,75 @@
 package com.screenreader.ocr.ocr
 
 import android.graphics.Bitmap
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.TextRecognizer
-import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+import android.util.Log
+import com.google.ai.client.generativeai.GenerativeModel
+import com.google.ai.client.generativeai.type.content
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-class OcrProcessor {
+class OcrProcessor(private val apiKey: String) {
 
-    private val latinRecognizer: TextRecognizer =
-        TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-
-    private val japaneseRecognizer: TextRecognizer =
-        TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
-
-    enum class OcrLanguage {
-        LATIN, JAPANESE, AUTO
+    private val generativeModel by lazy {
+        GenerativeModel(
+            modelName = "gemini-1.5-flash",
+            apiKey = apiKey
+        )
     }
 
     /**
-     * Bitmapからテキストを認識する
+     * Bitmapからテキストを認識する (Gemini API利用)
      */
     suspend fun recognizeText(
-        bitmap: Bitmap,
-        language: OcrLanguage = OcrLanguage.AUTO
-    ): OcrResult {
-        val image = InputImage.fromBitmap(bitmap, 0)
+        bitmap: Bitmap
+    ): OcrResult = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) {
+            Log.e("OcrProcessor", "API Key is empty. Cannot process OCR.")
+            return@withContext OcrResult("", emptyList(), 0f)
+        }
 
-        return when (language) {
-            OcrLanguage.LATIN -> recognizeWithRecognizer(image, latinRecognizer)
-            OcrLanguage.JAPANESE -> recognizeWithRecognizer(image, japaneseRecognizer)
-            OcrLanguage.AUTO -> {
-                // まず日本語で試行し、結果が貧弱ならラテン文字で再試行
-                val japResult = recognizeWithRecognizer(image, japaneseRecognizer)
-                if (japResult.text.isNotBlank()) {
-                    japResult
-                } else {
-                    recognizeWithRecognizer(image, latinRecognizer)
+        try {
+            val prompt = "画像内のテキストを正確にすべて文字起こししてください。\n縦書きの日本語も正確に読み取って横書きテキストに変換してください。\n出力は読み取ったテキスト文字列のみとし、余計な前置き、解説文、マークダウンのコードブロック指定 (```text など) は一切含めないでください。"
+            
+            val response = generativeModel.generateContent(
+                content {
+                    image(bitmap)
+                    text(prompt)
                 }
+            )
+
+            // 余計なマークダウン記法が返ってきた場合のサニタイズ
+            var resultText = response.text?.trim() ?: ""
+            if (resultText.startsWith("```")) {
+                resultText = resultText.substringAfter("\n").substringBeforeLast("```").trim()
             }
-        }
-    }
 
-    /**
-     * オーバーレイUIのテキストかどうかを判定
-     */
-    private fun isOverlayText(text: String): Boolean {
-        val trimmed = text.trim()
-        val uiPatterns = listOf(
-            "待機中", "キャプチャ中", "一時停止中", "キャプチャ領域"
-        )
-        if (uiPatterns.any { trimmed.contains(it) }) {
-            return true
-        }
-        if (trimmed.contains("保存:") && trimmed.contains("スキップ:")) {
-            return true
-        }
-        return false
-    }
+            Log.d("OcrProcessor", "Gemini OCR result length: ${resultText.length}")
 
-    private suspend fun recognizeWithRecognizer(
-        image: InputImage,
-        recognizer: TextRecognizer
-    ): OcrResult = suspendCancellableCoroutine { cont ->
-        recognizer.process(image)
-            .addOnSuccessListener { visionText ->
-                // Extract ALL lines from ALL blocks with their bounding boxes
-                val allLines = mutableListOf<LineWithRect>()
-                for (block in visionText.textBlocks) {
-                    for (line in block.lines) {
-                        if (!isOverlayText(line.text)) {
-                            allLines.add(LineWithRect(line.text, line.boundingBox))
-                        }
-                    }
-                }
-
-                // Sort lines for Japanese vertical reading order
-                // Primary: right to left (x descending), Secondary: top to bottom (y ascending)
-                val sortedLines = allLines.sortedWith(
-                    compareByDescending<LineWithRect> {
-                        it.rect?.right ?: 0
-                    }.thenBy {
-                        it.rect?.top ?: 0
-                    }
-                )
-
-                val sortedText = sortedLines.joinToString("\n") { it.text }
-
-                val blocks = sortedLines.map { line ->
+            val blocks = if (resultText.isNotEmpty()) {
+                listOf(
                     TextBlock(
-                        text = line.text,
-                        boundingBox = line.rect,
-                        lines = listOf(line.text)
-                    )
-                }
-
-                cont.resume(
-                    OcrResult(
-                        text = sortedText,
-                        blocks = blocks,
-                        confidence = if (blocks.isNotEmpty()) 1.0f else 0.0f
+                        text = resultText,
+                        boundingBox = null,
+                        lines = resultText.split("\n")
                     )
                 )
+            } else {
+                emptyList()
             }
-            .addOnFailureListener { e ->
-                cont.resumeWithException(e)
-            }
-    }
 
-    private data class LineWithRect(val text: String, val rect: android.graphics.Rect?)
+            OcrResult(
+                text = resultText,
+                blocks = blocks,
+                confidence = 1.0f
+            )
+        } catch (e: Exception) {
+            Log.e("OcrProcessor", "Gemini API recognition failed", e)
+            OcrResult("", emptyList(), 0f)
+        }
+    }
 
     fun close() {
-        latinRecognizer.close()
-        japaneseRecognizer.close()
+        // Nothing to close for GenerativeModel
     }
 }
 

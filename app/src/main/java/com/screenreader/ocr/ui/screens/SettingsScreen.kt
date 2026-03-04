@@ -17,8 +17,10 @@ import androidx.compose.ui.unit.dp
 fun SettingsScreen(
     captureIntervalSeconds: Int,
     similarityThreshold: Float,
+    geminiApiKey: String,
     onCaptureIntervalChange: (Int) -> Unit,
     onSimilarityThresholdChange: (Float) -> Unit,
+    onGeminiApiKeyChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -34,6 +36,34 @@ fun SettingsScreen(
         )
 
         Spacer(modifier = Modifier.height(24.dp))
+
+        // Gemini API Key
+        SettingsCard(
+            title = "Gemini API キー",
+            icon = Icons.Default.VpnKey,
+            description = "高精度OCRを利用するためのAPIキーを入力してください"
+        ) {
+            OutlinedTextField(
+                value = geminiApiKey,
+                onValueChange = onGeminiApiKeyChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("AIzaSy...") },
+                singleLine = true,
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                )
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "※キーは端末内にのみ保存され、外部に送信されることはありません。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Capture interval
         SettingsCard(
