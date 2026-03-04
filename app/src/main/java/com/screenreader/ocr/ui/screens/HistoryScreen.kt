@@ -17,16 +17,16 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.screenreader.ocr.data.OcrTextEntity
-import java.text.SimpleDateFormat
-import java.util.*
+import com.screenreader.ocr.data.SessionFolder
+import com.screenreader.ocr.data.SessionTextFile
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
-    texts: List<OcrTextEntity>,
-    onDeleteText: (OcrTextEntity) -> Unit,
+    sessions: List<SessionFolder>,
+    onDeleteSession: (String) -> Unit,
     onDeleteAll: () -> Unit,
     onShareText: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -34,9 +34,18 @@ fun HistoryScreen(
     var showDeleteAllDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
-    val filteredTexts = remember(texts, searchQuery) {
-        if (searchQuery.isBlank()) texts
-        else texts.filter { it.text.contains(searchQuery, ignoreCase = true) }
+    val totalFiles = sessions.sumOf { it.textFiles.size }
+
+    // Filter sessions by search query
+    val filteredSessions = remember(sessions, searchQuery) {
+        if (searchQuery.isBlank()) sessions
+        else sessions.map { session ->
+            session.copy(
+                textFiles = session.textFiles.filter {
+                    it.text.contains(searchQuery, ignoreCase = true)
+                }
+            )
+        }.filter { it.textFiles.isNotEmpty() }
     }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -48,17 +57,17 @@ fun HistoryScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "📝 保存済みテキスト",
+                text = "📝 文字起こし履歴",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
             Text(
-                text = "${texts.size} 件",
+                text = "${sessions.size} セッション / $totalFiles 件",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (texts.isNotEmpty()) {
+            if (sessions.isNotEmpty()) {
                 IconButton(onClick = { showDeleteAllDialog = true }) {
                     Icon(
                         imageVector = Icons.Default.DeleteSweep,
@@ -93,7 +102,7 @@ fun HistoryScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        if (filteredTexts.isEmpty()) {
+        if (filteredSessions.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -126,13 +135,13 @@ fun HistoryScreen(
         } else {
             LazyColumn(
                 contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(filteredTexts, key = { it.id }) { textEntity ->
-                    TextItemCard(
-                        textEntity = textEntity,
-                        onDelete = { onDeleteText(textEntity) },
-                        onShare = { onShareText(textEntity.text) }
+                items(filteredSessions, key = { it.folderName }) { session ->
+                    SessionCard(
+                        session = session,
+                        onDeleteSession = { onDeleteSession(session.folderName) },
+                        onShareText = onShareText
                     )
                 }
             }
@@ -144,7 +153,7 @@ fun HistoryScreen(
         AlertDialog(
             onDismissRequest = { showDeleteAllDialog = false },
             title = { Text("全て削除しますか？") },
-            text = { Text("保存済みの ${texts.size} 件のテキストがすべて削除されます。この操作は取り消せません。") },
+            text = { Text("全 ${sessions.size} セッション（$totalFiles 件のテキスト）が削除されます。この操作は取り消せません。") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -168,104 +177,224 @@ fun HistoryScreen(
 }
 
 @Composable
-private fun TextItemCard(
-    textEntity: OcrTextEntity,
-    onDelete: () -> Unit,
-    onShare: () -> Unit
+private fun SessionCard(
+    session: SessionFolder,
+    onDeleteSession: () -> Unit,
+    onShareText: (String) -> Unit
 ) {
     var isExpanded by remember { mutableStateOf(false) }
-    val clipboardManager = LocalClipboardManager.current
-    val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.JAPAN) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    // Format session name for display
+    val displayName = session.folderName.replace("_", " ").replace("-", "/", false)
+        .let { name ->
+            // Convert "2026/03/04 23/52/09" -> "2026/03/04 23:52:09"
+            if (name.length >= 19) {
+                name.substring(0, 10) + " " +
+                name.substring(11, 13) + ":" +
+                name.substring(14, 16) + ":" +
+                name.substring(17, 19)
+            } else name
+        }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable { isExpanded = !isExpanded }
             .animateContentSize(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Timestamp
+            // Session header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Folder,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = displayName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${session.textFiles.size} 件",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    IconButton(
+                        onClick = { showDeleteDialog = true },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "セッション削除",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+
+            // Preview of first text (always visible)
+            if (session.textFiles.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = dateFormat.format(Date(textEntity.timestamp)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "${textEntity.text.length} 文字",
-                    style = MaterialTheme.typography.labelSmall,
+                    text = session.textFiles.first().text,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = if (isExpanded) Int.MAX_VALUE else 2,
+                    overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Text content
-            Text(
-                text = textEntity.text,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = if (isExpanded) Int.MAX_VALUE else 3,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            // Action buttons (shown when expanded)
-            if (isExpanded) {
+            // Expanded: show all text files
+            if (isExpanded && session.textFiles.size > 1) {
                 Spacer(modifier = Modifier.height(12.dp))
+                Divider()
+                session.textFiles.forEachIndexed { index, textFile ->
+                    if (index > 0) { // Skip first since it's already shown above
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextFileItem(
+                            textFile = textFile,
+                            index = index + 1,
+                            onShareText = onShareText
+                        )
+                    }
+                }
+            }
+
+            // Expand indicator
+            if (session.textFiles.size > 1) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = if (isExpanded) "▲ 折りたたむ" else "▼ 全 ${session.textFiles.size} 件を表示",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            // Share all button when expanded
+            if (isExpanded) {
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.End
                 ) {
-                    // Copy
+                    val clipboardManager = LocalClipboardManager.current
                     TextButton(onClick = {
-                        clipboardManager.setText(AnnotatedString(textEntity.text))
+                        val allText = session.textFiles.joinToString("\n\n---\n\n") { it.text }
+                        clipboardManager.setText(AnnotatedString(allText))
                     }) {
-                        Icon(
-                            Icons.Default.ContentCopy,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("コピー")
+                        Text("全てコピー")
                     }
-
-                    // Share
-                    TextButton(onClick = onShare) {
-                        Icon(
-                            Icons.Default.Share,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
+                    TextButton(onClick = {
+                        val allText = session.textFiles.joinToString("\n\n---\n\n") { it.text }
+                        onShareText(allText)
+                    }) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("共有")
-                    }
-
-                    // Delete
-                    TextButton(
-                        onClick = onDelete,
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("削除")
+                        Text("全て共有")
                     }
                 }
             }
         }
+    }
+
+    // Delete session dialog
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("セッションを削除しますか？") },
+            text = { Text("「$displayName」の ${session.textFiles.size} 件のテキストが削除されます。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteSession()
+                        showDeleteDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("削除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("キャンセル")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun TextFileItem(
+    textFile: SessionTextFile,
+    index: Int,
+    onShareText: (String) -> Unit
+) {
+    val clipboardManager = LocalClipboardManager.current
+
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "#$index",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = textFile.text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(
+                onClick = { clipboardManager.setText(AnnotatedString(textFile.text)) },
+                modifier = Modifier.height(28.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(2.dp))
+                Text("コピー", style = MaterialTheme.typography.labelSmall)
+            }
+            TextButton(
+                onClick = { onShareText(textFile.text) },
+                modifier = Modifier.height(28.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(2.dp))
+            }
+        }
+        Divider(modifier = Modifier.padding(vertical = 4.dp))
     }
 }

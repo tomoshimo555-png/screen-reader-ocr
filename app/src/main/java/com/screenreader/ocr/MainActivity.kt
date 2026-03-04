@@ -24,15 +24,17 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.screenreader.ocr.data.AppDatabase
-import com.screenreader.ocr.data.OcrTextEntity
+import com.screenreader.ocr.data.SessionRepository
+import com.screenreader.ocr.data.SessionFolder
 import com.screenreader.ocr.service.FloatingOverlayService
 import com.screenreader.ocr.service.ScreenCaptureService
 import com.screenreader.ocr.ui.screens.HistoryScreen
 import com.screenreader.ocr.ui.screens.HomeScreen
 import com.screenreader.ocr.ui.screens.SettingsScreen
 import com.screenreader.ocr.ui.theme.ScreenReaderOCRTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
@@ -115,9 +117,14 @@ class MainActivity : ComponentActivity() {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route ?: "home"
 
-        val db = remember { AppDatabase.getInstance(this@MainActivity) }
-        val texts by db.ocrTextDao().getAllTexts().collectAsState(initial = emptyList())
+        val sessionRepo = remember { SessionRepository(this@MainActivity) }
+        var sessions by remember { mutableStateOf<List<SessionFolder>>(emptyList()) }
         val scope = rememberCoroutineScope()
+
+        // Load sessions when screen is shown
+        LaunchedEffect(Unit) {
+            sessions = withContext(Dispatchers.IO) { sessionRepo.getAllSessions() }
+        }
 
         Scaffold(
             bottomBar = {
@@ -136,8 +143,9 @@ class MainActivity : ComponentActivity() {
                         icon = {
                             BadgedBox(
                                 badge = {
-                                    if (texts.isNotEmpty()) {
-                                        Badge { Text("${texts.size}") }
+                                    val totalFiles = sessions.sumOf { it.textFiles.size }
+                                    if (totalFiles > 0) {
+                                        Badge { Text("$totalFiles") }
                                     }
                                 }
                             ) {
@@ -194,16 +202,22 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 composable("history") {
+                    // Reload sessions when entering history screen
+                    LaunchedEffect(Unit) {
+                        sessions = withContext(Dispatchers.IO) { sessionRepo.getAllSessions() }
+                    }
                     HistoryScreen(
-                        texts = texts,
-                        onDeleteText = { text ->
+                        sessions = sessions,
+                        onDeleteSession = { sessionId ->
                             scope.launch {
-                                db.ocrTextDao().delete(text)
+                                withContext(Dispatchers.IO) { sessionRepo.deleteSession(sessionId) }
+                                sessions = withContext(Dispatchers.IO) { sessionRepo.getAllSessions() }
                             }
                         },
                         onDeleteAll = {
                             scope.launch {
-                                db.ocrTextDao().deleteAll()
+                                withContext(Dispatchers.IO) { sessionRepo.deleteAllSessions() }
+                                sessions = withContext(Dispatchers.IO) { sessionRepo.getAllSessions() }
                             }
                         },
                         onShareText = { text -> shareText(text) }
@@ -242,7 +256,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startCaptureService(resultCode: Int, resultData: Intent) {
-        val sessionId = System.currentTimeMillis().toString()
+        val sessionRepo = SessionRepository(this)
+        val sessionId = sessionRepo.generateSessionId()
 
         // Start capture service
         val captureIntent = ScreenCaptureService.createStartIntent(

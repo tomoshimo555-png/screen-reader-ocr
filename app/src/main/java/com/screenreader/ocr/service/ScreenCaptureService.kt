@@ -27,8 +27,7 @@ import androidx.core.app.NotificationCompat
 import com.screenreader.ocr.MainActivity
 import com.screenreader.ocr.R
 import com.screenreader.ocr.ScreenReaderApp
-import com.screenreader.ocr.data.AppDatabase
-import com.screenreader.ocr.data.OcrTextEntity
+import com.screenreader.ocr.data.SessionRepository
 import com.screenreader.ocr.ocr.DuplicateDetector
 import com.screenreader.ocr.ocr.OcrProcessor
 import kotlinx.coroutines.*
@@ -112,6 +111,7 @@ class ScreenCaptureService : Service() {
 
     private val ocrProcessor = OcrProcessor()
     private val duplicateDetector = DuplicateDetector()
+    private lateinit var sessionRepository: SessionRepository
 
     private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val handler = Handler(Looper.getMainLooper())
@@ -160,6 +160,7 @@ class ScreenCaptureService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        sessionRepository = SessionRepository(this)
         val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
@@ -312,20 +313,19 @@ class ScreenCaptureService : Service() {
                     return@launch
                 }
 
-                // Save to database
-                val entity = OcrTextEntity(
-                    text = result.text,
-                    wordCount = result.text.length,
-                    sessionId = sessionId
-                )
-
-                val db = AppDatabase.getInstance(this@ScreenCaptureService)
-                db.ocrTextDao().insert(entity)
-
+                // Save to file: Documents/ScreenReaderOCR/{sessionId}/{captureCount+1}.txt
                 captureCount++
-                Log.d(TAG, "Text saved (total: $captureCount)")
-                broadcastStatus("保存: $captureCount 件 / スキップ: $skipCount 件")
-                updateNotification("保存: $captureCount 件 | スキップ: $skipCount 件")
+                val uri = sessionRepository.saveText(sessionId, captureCount, result.text)
+
+                if (uri != null) {
+                    Log.d(TAG, "Text saved to file (total: $captureCount)")
+                    broadcastStatus("保存: $captureCount 件 / スキップ: $skipCount 件")
+                    updateNotification("保存: $captureCount 件 | スキップ: $skipCount 件")
+                } else {
+                    captureCount--
+                    Log.e(TAG, "Failed to save text file")
+                    broadcastStatus("❌ ファイル保存失敗")
+                }
 
                 bitmap.recycle()
             } catch (e: Exception) {
